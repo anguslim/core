@@ -244,6 +244,8 @@ app.on('ready', function() {
         return;
     }
 
+    app.initializeCache();
+
     app.registerNamedCallback('convertToElectron', convertOptions.convertToElectron);
     app.registerNamedCallback('getWindowOptionsById', coreState.getWindowOptionsById);
 

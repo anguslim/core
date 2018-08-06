@@ -3,7 +3,6 @@
  */
 
 // build-in modules
-let fs = require('fs');
 let path = require('path');
 let url = require('url');
 let electron = require('electron');
@@ -45,7 +44,6 @@ import {
 
 const subscriptionManager = new SubscriptionManager();
 const isWin32 = process.platform === 'win32';
-const windowPosCacheFolder = 'winposCache';
 const WindowsMessages = {
     WM_KEYDOWN: 0x0100,
     WM_KEYUP: 0x0101,
@@ -1739,9 +1737,8 @@ Window.exists = function(identity) {
 };
 
 Window.getBoundsFromDisk = function(identity, callback, errorCallback) {
-    let cacheFile = getBoundsCacheSafeFileName(identity);
     try {
-        fs.readFile(cacheFile, 'utf8', (err, data) => {
+        electronApp.readFromCache(getBoundsCacheSafeName(identity), (err, data) => {
             if (err) {
                 errorCallback(err);
             } else {
@@ -1903,7 +1900,6 @@ function createWindowTearDown(identity, id, browserWindow, _boundsChangedHandler
 }
 
 function saveBoundsToDisk(identity, bounds, callback) {
-    const cacheFile = getBoundsCacheSafeFileName(identity);
     const data = {
         'active': 'true',
         'height': bounds.height,
@@ -1915,11 +1911,8 @@ function saveBoundsToDisk(identity, bounds, callback) {
     };
 
     try {
-        const userCache = electronApp.getPath('userCache');
-        fs.mkdir(path.join(userCache, windowPosCacheFolder), () => {
-            fs.writeFile(cacheFile, JSON.stringify(data), (writeFileErr) => {
-                callback(writeFileErr);
-            });
+        electronApp.writeToCache(getBoundsCacheSafeName(identity), JSON.stringify(data), result => {
+            callback(result);
         });
     } catch (err) {
         callback(err);
@@ -1927,10 +1920,8 @@ function saveBoundsToDisk(identity, bounds, callback) {
 
 }
 //make sure the uuid/names with special characters do not break the bounds cache.
-function getBoundsCacheSafeFileName(identity) {
-    let safeName = new Buffer(identity.uuid + '-' + identity.name).toString('hex');
-    const userCache = electronApp.getPath('userCache');
-    return path.join(userCache, windowPosCacheFolder, `${safeName}.json`);
+function getBoundsCacheSafeName(identity) {
+    return Buffer(identity.uuid + '-' + identity.name).toString('hex');
 }
 
 function applyAdditionalOptionsToWindowOnVisible(browserWindow, callback) {
