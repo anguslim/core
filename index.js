@@ -16,6 +16,8 @@ let Menu = electron.Menu;
 // npm modules
 let _ = require('underscore');
 let minimist = require('minimist');
+let level = require('level');
+let url = require('url');
 
 // local modules
 let Application = require('./src/browser/api/application.js').Application;
@@ -267,6 +269,8 @@ app.on('ready', function() {
 
     rotateLogs(coreState.argo);
 
+    migrateLocalStorage(coreState.argo);
+
     //Once we determine we are the first instance running we setup the API's
     //Create the new Application.
     initServer();
@@ -502,6 +506,41 @@ function rvmCleanup(argo) {
         }, (err) => {
             console.log(err);
         });
+    }
+}
+
+// See the following for the Local Storage schema used by Chromium:
+// https://cs.chromium.org/chromium/src/content/browser/dom_storage/local_storage_context_mojo.cc?rcl=8c6c0c057eac44d3521afffb928b862f04767705&l=42
+function migrateLocalStorage(argo) {
+    const oldLocalStoragePath = argo['old-local-storage-path'] || false;
+    const newLocalStoragePath = argo['new-local-storage-path'] || false;
+
+    if (oldLocalStoragePath && newLocalStoragePath) {
+        const dbOld = level(path.join(oldLocalStoragePath, 'leveldb'));
+        const dbNew = level(path.join(newLocalStoragePath, 'leveldb'));
+        log.writeToLog('info', 'Migrating from ' + oldLocalStoragePath + ' to ' + newLocalStoragePath);
+
+        const startupUrl = new url.URL(coreState.argo['startup-url']);
+        const metaKey = 'META:' + startupUrl.origin;
+        const originKeyPrefix = '_' + startupUrl.origin + '\0';
+
+        dbOld.createReadStream()
+            .on('data', function(data) {
+                if (data.key === metaKey ||
+                    data.key.startsWith(originKeyPrefix)) {
+                    log.writeToLog('info', 'Writing to new LevelDB instance: ' +
+                        'key = ' + data.key + ', value = ' +
+                        data.value);
+                    dbNew.put(data.key, data.value);
+                }
+            })
+            .on('error', function(err) {
+                log.writeToLog('info', 'LevelDB error: ' + err);
+            })
+            .on('close', function() {
+                log.writeToLog('info', 'Done LevelDB migration');
+                dbNew.close();
+            });
     }
 }
 
